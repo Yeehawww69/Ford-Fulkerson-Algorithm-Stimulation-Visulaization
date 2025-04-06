@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ford-Fulkerson Algorithm Visualization</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        #container {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+        }
+        #input-section, #visualization {
+            margin: 20px;
+        }
+        canvas {
+            border: 1px solid #000;
+            background-color: #fff;
+        }
+        textarea {
+            width: 300px;
+            height: 150px;
+            margin-top: 10px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 10px;
+            background-color: #007BFF;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #complexity, #step-info {
+            font-size: 18px;
+            margin-top: 20px;
+            color: #333;
+            text-align: left;
+            max-width: 500px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+    </style>
+</head>
+<body>
+    <h1>Ford-Fulkerson Algorithm Visualization</h1>
+    <div id="container">
+        <div id="input-section">
+            <h2>Input Flow Network</h2>
+            <p>Format: One edge per line as "source target capacity" (e.g., "0 1 10")</p>
+            <textarea id="graph-input" placeholder="0 1 10
+1 2 5
+0 2 15"></textarea><br>
+            <button onclick="runAlgorithm()">Run Algorithm</button>
+        </div>
+        <div id="visualization">
+            <h2>Graph Visualization</h2>
+            <canvas id="graph-canvas" width="500" height="400"></canvas>
+            <div id="max-flow">Max Flow: 0</div>
+            <div id="step-info">Steps will appear here:</div>
+        </div>
+    </div>
+    <div id="complexity">
+        Time Complexity: O(|E| * |f|) where |E| is the number of edges and |f| is the maximum flow
+    </div>
+
+    <script>
+        const canvas = document.getElementById('graph-canvas');
+        const ctx = canvas.getContext('2d');
+        let graph = [];
+        let residualGraph = [];
+        let nodes = new Set();
+        let maxFlow = 0;
+
+        // Parse input and initialize graph
+        function parseInput() {
+            const input = document.getElementById('graph-input').value.trim().split('\n');
+            graph = [];
+            residualGraph = [];
+            nodes.clear();
+            maxFlow = 0;
+
+            input.forEach(line => {
+                const [u, v, cap] = line.split(' ').map(Number);
+                if (!isNaN(u) && !isNaN(v) && !isNaN(cap)) {
+                    nodes.add(u);
+                    nodes.add(v);
+                    graph.push({ u, v, cap });
+                    residualGraph.push({ u, v, cap, flow: 0 });
+                }
+            });
+            document.getElementById('step-info').innerHTML = "Steps will appear here:<br>Initial graph drawn";
+            drawGraph();
+        }
+
+        // BFS to find augmenting path
+        function bfs(s, t, parent) {
+            const visited = new Array(nodes.size).fill(false);
+            const queue = [s];
+            visited[s] = true;
+            parent[s] = -1;
+
+            while (queue.length > 0) {
+                const u = queue.shift();
+                for (let edge of residualGraph) {
+                    if (!visited[edge.v] && edge.cap - edge.flow > 0 && edge.u === u) {
+                        queue.push(edge.v);
+                        visited[edge.v] = true;
+                        parent[edge.v] = u;
+                    }
+                }
+            }
+            return visited[t];
+        }
+
+        // Delay function for animation
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Ford-Fulkerson algorithm with step-by-step visualization
+        async function fordFulkerson(source, sink) {
+            const parent = new Array(nodes.size).fill(-1);
+            maxFlow = 0;
+            let step = 1;
+
+            while (bfs(source, sink, parent)) {
+                let pathFlow = Infinity;
+                let s = sink;
+                let path = [];
+
+                // Find minimum residual capacity and path
+                while (s !== source) {
+                    const u = parent[s];
+                    path.unshift(`${u} -> ${s}`);
+                    for (let edge of residualGraph) {
+                        if (edge.u === u && edge.v === s) {
+                            pathFlow = Math.min(pathFlow, edge.cap - edge.flow);
+                            break;
+                        }
+                    }
+                    s = u;
+                }
+
+                // Update residual capacities
+                s = sink;
+                while (s !== source) {
+                    const u = parent[s];
+                    for (let edge of residualGraph) {
+                        if (edge.u === u && edge.v === s) {
+                            edge.flow += pathFlow;
+                        }
+                    }
+                    s = u;
+                }
+
+                maxFlow += pathFlow;
+                document.getElementById('max-flow').textContent = `Max Flow: ${maxFlow}`;
+                const stepText = `Step ${step}: Augmenting path ${path.join(', ')} with flow ${pathFlow}`;
+                document.getElementById('step-info').innerHTML += `<br>${stepText}`;
+                drawGraph();
+                step++;
+                await delay(4000); // Increased to 4 seconds
+            }
+
+            document.getElementById('step-info').innerHTML += `<br>Final graph with maximum flow: ${maxFlow}`;
+            drawGraph();
+        }
+
+        // Draw the graph on canvas
+        function drawGraph() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const nodePositions = {};
+            const radius = 20;
+            const nodeCount = nodes.size;
+
+            // Assign positions to nodes in a circle
+            Array.from(nodes).forEach((node, i) => {
+                const angle = (2 * Math.PI * i) / nodeCount;
+                const x = canvas.width / 2 + 150 * Math.cos(angle);
+                const y = canvas.height / 2 + 150 * Math.sin(angle);
+                nodePositions[node] = { x, y };
+            });
+
+            // Draw edges
+            residualGraph.forEach(edge => {
+                const { u, v, cap, flow } = edge;
+                const start = nodePositions[u];
+                const end = nodePositions[v];
+                ctx.beginPath();
+                ctx.moveTo(start.x, start.y);
+                ctx.lineTo(end.x, end.y);
+                ctx.strokeStyle = flow > 0 ? '#FF0000' : '#000000';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = '#000000';
+                ctx.font = '12px Arial';
+                ctx.fillText(`${flow}/${cap}`, (start.x + end.x) / 2, (start.y + end.y) / 2);
+            });
+
+            // Draw nodes
+            for (let node in nodePositions) {
+                const { x, y } = nodePositions[node];
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, 2 * Math.PI);
+                ctx.fillStyle = '#007BFF';
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '16px Arial';
+                ctx.fillText(node, x - 5, y + 5);
+            }
+        }
+
+        // Run the algorithm
+        async function runAlgorithm() {
+            parseInput();
+            const source = Math.min(...Array.from(nodes));
+            const sink = Math.max(...Array.from(nodes));
+            await fordFulkerson(source, sink);
+        }
+    </script>
+</body>
+</html>
